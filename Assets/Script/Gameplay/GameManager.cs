@@ -1,28 +1,23 @@
 using UnityEngine;
 using UnityEngine.UI;
-using System.Collections.Generic;
 
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance; // Singleton
+    public static GameManager Instance;
 
     [Header("Jellyfish Prefabs theo cấp")]
-    public GameObject[] jellyfishPrefabs; // Kéo các prefab cấp 0-10 vào Inspector
+    public GameObject[] jellyfishPrefabs;
 
     [Header("UI")]
     public Text scoreText;
-    public Image nextJellyImage;
+    public Image nextJellyImage;           // Preview sứa tiếp theo
     public Canvas gameCanvas;
-
-    [Header("Dropper & Spawn")]
-    public Transform dropperTransform;
-    public Transform spawnPoint; // Vị trí thả jellyfish
 
     [Header("Gameplay")]
     public int currentScore = 0;
     public int highScore = 0;
-    public int currentJellyLevel = 0;
-    public int nextJellyLevel = 0;
+    public int nextJellyLevel = 0;          // Cấp sứa sắp thả
+    public int previewJellyLevel = 0;       // PUBLIC để DropperController truy cập
 
     private void Awake()
     {
@@ -48,6 +43,7 @@ public class GameManager : MonoBehaviour
     {
         currentScore += addScore;
         UpdateScoreUI();
+        
         if (currentScore > highScore)
         {
             highScore = currentScore;
@@ -58,64 +54,77 @@ public class GameManager : MonoBehaviour
     public void UpdateScoreUI()
     {
         if (scoreText != null)
-            scoreText.text = "Score: " + currentScore;
+            scoreText.text = currentScore.ToString();
     }
 
     public void PrepareNextJelly()
     {
-        // Random cấp jelly tiếp theo (hoặc logic riêng của bạn)
-        nextJellyLevel = Random.Range(0, jellyfishPrefabs.Length);
-        // Hiển thị sprite jellyfish kế tiếp trong UI
-        if (nextJellyImage != null && jellyfishPrefabs[nextJellyLevel] != null)
+        // Random cấp jelly tiếp theo (giới hạn 0-4 cho đầu game dễ hơn)
+        int maxLevel = Mathf.Min(5, jellyfishPrefabs.Length);
+        previewJellyLevel = Random.Range(0, maxLevel);
+
+        // Hiển thị sprite jellyfish preview trong UI
+        if (nextJellyImage != null && previewJellyLevel < jellyfishPrefabs.Length)
         {
-            Sprite sprite = jellyfishPrefabs[nextJellyLevel].GetComponent<SpriteRenderer>().sprite;
-            nextJellyImage.sprite = sprite;
+            GameObject prefab = jellyfishPrefabs[previewJellyLevel];
+            if (prefab != null)
+            {
+                SpriteRenderer sr = prefab.GetComponent<SpriteRenderer>();
+                if (sr != null)
+                {
+                    nextJellyImage.sprite = sr.sprite;
+                }
+            }
         }
     }
 
     public void SpawnJellyfish(Vector3 position, int jellyLevel)
     {
         if (jellyLevel < 0 || jellyLevel >= jellyfishPrefabs.Length) return;
-        GameObject obj = Instantiate(jellyfishPrefabs[jellyLevel], position, Quaternion.identity);
 
+        GameObject obj = Instantiate(jellyfishPrefabs[jellyLevel], position, Quaternion.identity);
         Jellyfish jelly = obj.GetComponent<Jellyfish>();
-        if (jelly != null) jelly.jellyLevel = jellyLevel;
+        if (jelly != null)
+        {
+            jelly.jellyLevel = jellyLevel;
+        }
     }
 
-    // Gọi khi dropper thả jellyfish
-    public void OnDropJellyfish()
+    // Gọi khi dropper thả jellyfish (với vị trí tùy chỉnh)
+    public void OnDropJellyfish(Vector3 dropPosition)
     {
-        // Tạo jellyfish ở vị trí dropper/spawnPoint với cấp nextJellyLevel
-        Vector3 pos = spawnPoint != null ? spawnPoint.position : dropperTransform.position;
-        SpawnJellyfish(pos, nextJellyLevel);
+        // Spawn jellyfish vật lý tại vị trí dropper
+        SpawnJellyfish(dropPosition, nextJellyLevel);
 
-        // Gán lại jelly tiếp theo cho dropper
+        // Chuyển preview thành current cho lần drop tiếp theo
+        nextJellyLevel = previewJellyLevel;
+
+        // Prepare jellyfish mới cho preview
         PrepareNextJelly();
     }
 
     // Xử lý khi merge thành công
     public void OnMergeJellyfish(int mergedLevel, Vector3 position)
     {
-        // Tăng điểm, có thể dựa trên cấp jellyfish
+        // Tăng điểm dựa trên cấp
         UpdateScore((mergedLevel + 1) * 10);
 
-        // Spawn jellyfish mới
-        SpawnJellyfish(position, mergedLevel + 1);
-
-        // Có thể thêm hiệu ứng, animation, particle tại đây
+        // Spawn jellyfish mới (cấp cao hơn)
+        if (mergedLevel + 1 < jellyfishPrefabs.Length)
+        {
+            SpawnJellyfish(position, mergedLevel + 1);
+        }
     }
 
     public void ExitToMenu()
     {
         PlayerPrefs.SetInt("Highscore", highScore);
-        // Ẩn Canvas game, chuyển về menu (tuỳ thuộc GameFlowManager)
         if (gameCanvas != null) gameCanvas.gameObject.SetActive(false);
     }
 
     public void GameOver()
     {
         PlayerPrefs.SetInt("Highscore", highScore);
-        // Reload lại scene (hoặc gọi coroutine chuyển cảnh)
-        UnityEngine.SceneManagement.SceneManager.LoadScene("MainScene");
+        UnityEngine.SceneManagement.SceneManager.LoadScene("SampleScene");
     }
 }

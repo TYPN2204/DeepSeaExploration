@@ -16,7 +16,7 @@ public class AudioManager : MonoBehaviour
     public void PlayGameplayMusic()
     {
         musicSource.clip = gameplayMusic;
-        musicSource.volume = 0.01f;
+        musicSource.volume = 0.02f;
         musicSource.Play();
     }
 
