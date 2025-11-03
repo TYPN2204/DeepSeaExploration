@@ -65,8 +65,11 @@ public class GameFlowManager : MonoBehaviour
         {
             menuVideo.gameObject.SetActive(true);
             menuVideo.targetCameraAlpha = 1f;
+            menuVideo.transform.position = new Vector3(0, 0, 100);
+            menuVideo.transform.localScale = Vector3.one;
             menuVideo.Play();
         }
+        
         if (audioManager != null) audioManager.PlayMenuMusic();
         
         if (menuCanvas != null) menuCanvas.gameObject.SetActive(true);
@@ -83,6 +86,7 @@ public class GameFlowManager : MonoBehaviour
         {
             readyVideo.gameObject.SetActive(true);
             readyVideo.targetCameraAlpha = 1f;
+            readyVideo.transform.position = new Vector3(0, 0, 90);
             readyVideo.Play();
         }
         
@@ -91,26 +95,26 @@ public class GameFlowManager : MonoBehaviour
             readyCanvas.gameObject.SetActive(true);
         }
 
-        // Spawn particle bọt biển (Z = -1 để render trên video)
+        // Spawn particle bọt biển tại Y = -8.7
         if (bubblesParticlePrefab != null)
         {
             GameObject particle = Instantiate(bubblesParticlePrefab);
-            particle.transform.position = new Vector3(0, -8.7f, -1); // Gần camera
+            particle.transform.position = new Vector3(0, -8.7f, -1);
         }
 
         if (audioManager != null) audioManager.PlayGameplayMusic();
 
-        // HIỆU ỨNG: Menu video fade out + scale
+        // HIỆU ỨNG: Menu video fade out + scale to 1.2x
         Sequence menuTransition = DOTween.Sequence();
         
         if (menuVideo != null)
         {
-            // Fade alpha
+            // Fade alpha từ 1 → 0
             menuTransition.Join(DOTween.To(() => menuVideo.targetCameraAlpha, 
                                           x => menuVideo.targetCameraAlpha = x, 
                                           0f, 0.5f));
             
-            // Scale (nếu cần)
+            // Scale từ 1 → 1.2
             menuTransition.Join(menuVideo.transform.DOScale(1.2f, 0.5f));
         }
 
@@ -121,6 +125,9 @@ public class GameFlowManager : MonoBehaviour
             {
                 menuVideo.Stop();
                 menuVideo.gameObject.SetActive(false);
+                // Reset lại cho lần sau
+                menuVideo.transform.localScale = Vector3.one;
+                menuVideo.targetCameraAlpha = 1f;
             }
         });
 
@@ -136,17 +143,18 @@ public class GameFlowManager : MonoBehaviour
         Debug.Log("=== TRANSITION: Ready → Gameplay ===");
         vp.loopPointReached -= OnReadyVideoEnd;
 
-        // BẬT GAMEPLAY VIDEO (alpha = 0 ban đầu)
+        // BẬT GAMEPLAY VIDEO tại vị trí dưới (0, -10, 80)
         if (gameplayVideo != null) 
         {
             gameplayVideo.gameObject.SetActive(true);
-            gameplayVideo.targetCameraAlpha = 0f;
+            gameplayVideo.targetCameraAlpha = 1f;
+            gameplayVideo.transform.position = new Vector3(0, -10, 80);
             gameplayVideo.Play();
         }
         
         if (gameCanvas != null) gameCanvas.gameObject.SetActive(true);
 
-        // Spawn particle
+        // Spawn particle tại Y = -8.7
         if (bubblesParticlePrefab != null)
         {
             GameObject particle = Instantiate(bubblesParticlePrefab);
@@ -156,28 +164,20 @@ public class GameFlowManager : MonoBehaviour
         // HIỆU ỨNG ĐỒNG THỜI
         Sequence transition = DOTween.Sequence();
 
-        // Ready fade out + move up
+        // 1. Ready fade out + move lên (0,0,90) → (0,10,90)
         if (readyVideo != null)
         {
             transition.Join(DOTween.To(() => readyVideo.targetCameraAlpha, 
                                       x => readyVideo.targetCameraAlpha = x, 
                                       0f, 0.7f));
             
-            Vector3 targetPos = readyVideo.transform.position + Vector3.up * 5f;
-            transition.Join(readyVideo.transform.DOMove(targetPos, 0.7f));
+            transition.Join(readyVideo.transform.DOMoveY(10f, 0.7f));
         }
 
-        // Gameplay fade in + move up
+        // 2. Gameplay move lên (0,-10,80) → (0,0,80)
         if (gameplayVideo != null)
         {
-            transition.Join(DOTween.To(() => gameplayVideo.targetCameraAlpha, 
-                                      x => gameplayVideo.targetCameraAlpha = x, 
-                                      1f, 0.7f));
-            
-            Vector3 startPos = gameplayVideo.transform.position;
-            Vector3 targetPos = startPos + Vector3.up * 5f;
-            gameplayVideo.transform.position = startPos - Vector3.up * 5f;
-            transition.Join(gameplayVideo.transform.DOMove(targetPos, 0.7f));
+            transition.Join(gameplayVideo.transform.DOMoveY(0f, 0.7f));
         }
 
         transition.OnComplete(() =>
@@ -187,14 +187,20 @@ public class GameFlowManager : MonoBehaviour
             {
                 readyVideo.Stop();
                 readyVideo.gameObject.SetActive(false);
+                // Reset lại
+                readyVideo.transform.position = new Vector3(0, 0, 90);
+                readyVideo.targetCameraAlpha = 1f;
             }
 
-            // Kích hoạt dropper
-            DropperController dropper = FindObjectOfType<DropperController>();
-            if (dropper != null)
+            // SAU 3 GIÂY mới kích hoạt dropper
+            DOVirtual.DelayedCall(3f, () =>
             {
-                dropper.StartDropperSequence();
-            }
+                DropperController dropper = FindObjectOfType<DropperController>();
+                if (dropper != null)
+                {
+                    dropper.StartDropperSequence();
+                }
+            });
         });
     }
 

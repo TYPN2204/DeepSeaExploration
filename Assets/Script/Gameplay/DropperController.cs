@@ -86,12 +86,17 @@ public class DropperController : MonoBehaviour
     {
         Debug.Log("StartDropperSequence called!");
         
-        // Animation dropper xuất hiện
+        // Load current jellyfish TRƯỚC (để có sprite và scale)
+        LoadCurrentJellyfish();
+        
+        // Animation dropper xuất hiện từ ngoài camera (Y cao hơn)
         if (rectTransform != null)
         {
             Vector2 startPos = rectTransform.anchoredPosition;
-            startPos.y = dropperY + 300f;
+            startPos.y = dropperY + 500f; // Bắt đầu từ ngoài camera
             rectTransform.anchoredPosition = startPos;
+
+            // Tween xuống vị trí dropperY
             rectTransform.DOAnchorPosY(dropperY, 0.5f).SetEase(Ease.OutBack);
         }
 
@@ -101,9 +106,6 @@ public class DropperController : MonoBehaviour
             canMove = true;
             Debug.Log("Can move now!");
         });
-
-        // Load current jellyfish
-        LoadCurrentJellyfish();
     }
 
     public void LoadCurrentJellyfish()
