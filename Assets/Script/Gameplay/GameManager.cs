@@ -142,4 +142,22 @@ public class GameManager : MonoBehaviour
         PlayerPrefs.SetInt("Highscore", highScore);
         UnityEngine.SceneManagement.SceneManager.LoadScene("SampleScene");
     }
+
+    public void TriggerGameOver()
+    {
+        Debug.Log("TriggerGameOver called!");
+        
+        // Dừng game (tùy chọn: Time.timeScale = 0)
+        
+        // Hiện Game Over UI
+        GameOverManager gameOverManager = FindObjectOfType<GameOverManager>();
+        if (gameOverManager != null)
+        {
+            gameOverManager.ShowGameOver(currentScore);
+        }
+        else
+        {
+            Debug.LogError("GameOverManager not found!");
+        }
+    }
 }

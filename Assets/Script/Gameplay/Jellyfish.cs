@@ -33,40 +33,37 @@ public class Jellyfish : MonoBehaviour
 
     public void MergeWith(Jellyfish other, Vector3 mergePosition)
     {
-        // Disable physics để không bị ảnh hưởng trong quá trình merge
+        // Disable physics
         Rigidbody2D rb = GetComponent<Rigidbody2D>();
         if (rb != null) rb.simulated = false;
         
         Rigidbody2D otherRb = other.GetComponent<Rigidbody2D>();
         if (otherRb != null) otherRb.simulated = false;
 
-        // Tính điểm: 100 x (level + 1)
-        // Level 0 = cấp 1 → 100 điểm
-        // Level 1 = cấp 2 → 200 điểm
+        // Tính điểm
         int scoreGained = 100 * (jellyLevel + 1);
         GameManager.Instance.UpdateScore(scoreGained);
 
-        // ANIMATION MERGE (nhanh để không bị tràn khoảng trống)
-        float mergeDuration = 0.25f;
+        // ANIMATION MERGE (chậm hơn để dễ nhìn)
+        float mergeDuration = 0.4f;
 
         Sequence mergeSeq = DOTween.Sequence();
         
         // Cả 2 jellyfish di chuyển về trung điểm + thu nhỏ về 0
-        mergeSeq.Join(transform.DOMove(mergePosition, mergeDuration).SetEase(Ease.InQuad));
+        mergeSeq.Join(transform.DOMove(mergePosition, mergeDuration).SetEase(Ease.InOutQuad));
         mergeSeq.Join(transform.DOScale(0, mergeDuration).SetEase(Ease.InBack));
         
-        mergeSeq.Join(other.transform.DOMove(mergePosition, mergeDuration).SetEase(Ease.InQuad));
+        mergeSeq.Join(other.transform.DOMove(mergePosition, mergeDuration).SetEase(Ease.InOutQuad));
         mergeSeq.Join(other.transform.DOScale(0, mergeDuration).SetEase(Ease.InBack));
         
         mergeSeq.OnComplete(() =>
         {
-            // Xóa 2 jellyfish cũ
             Destroy(gameObject);
             Destroy(other.gameObject);
         });
 
-        // Spawn jellyfish mới (level + 1) NGAY SAU KHI animation bắt đầu
-        DOVirtual.DelayedCall(mergeDuration * 0.5f, () =>
+        // Spawn jellyfish mới SAU KHI animation gần xong
+        DOVirtual.DelayedCall(mergeDuration * 0.6f, () =>
         {
             SpawnMergedJellyfish(mergePosition, jellyLevel + 1);
         });
@@ -74,7 +71,6 @@ public class Jellyfish : MonoBehaviour
 
     private void SpawnMergedJellyfish(Vector3 position, int newLevel)
     {
-        // Kiểm tra có level tiếp theo không
         if (newLevel >= GameManager.Instance.jellyfishPrefabs.Length)
         {
             Debug.Log("Max level reached!");
@@ -93,14 +89,32 @@ public class Jellyfish : MonoBehaviour
         // Lấy scale gốc từ prefab
         Vector3 targetScale = GameManager.Instance.jellyfishPrefabs[newLevel].transform.localScale;
 
-        // ANIMATION: Scale từ 0 lên scale gốc
+        // ANIMATION: Scale từ 0 → overshoot → target (bong bóng núng nính)
         newJellyObj.transform.localScale = Vector3.zero;
-        newJellyObj.transform.DOScale(targetScale, 0.3f).SetEase(Ease.OutBack).OnComplete(() =>
+        newJellyObj.transform.DOScale(targetScale * 1.15f, 0.25f).SetEase(Ease.OutBack).OnComplete(() =>
         {
-            // Hiệu ứng đung đưa sau khi phóng to xong
-            newJellyObj.transform.DOPunchRotation(new Vector3(0, 0, 10), 0.4f, 10, 1);
+            // Co lại về scale bình thường
+            newJellyObj.transform.DOScale(targetScale, 0.15f).SetEase(Ease.InOutQuad).OnComplete(() =>
+            {
+                // Đung đưa nhẹ
+                newJellyObj.transform.DOPunchRotation(new Vector3(0, 0, 8), 0.4f, 8, 0.5f);
+            });
         });
 
-        Debug.Log($"Spawned merged jellyfish level {newLevel} with scale {targetScale}");
+        // HIỆU ỨNG PHÁT SÁNG (tăng brightness sprite)
+        SpriteRenderer sr = newJellyObj.GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            // Lưu màu gốc
+            Color originalColor = sr.color;
+            
+            // Phát sáng: Tăng brightness (color * 2)
+            sr.color = originalColor * 2f;
+            
+            // Về màu bình thường
+            sr.DOColor(originalColor, 0.5f).SetEase(Ease.OutQuad);
+        }
+
+        Debug.Log($"Spawned merged jellyfish level {newLevel}");
     }
 }

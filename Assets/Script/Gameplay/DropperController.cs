@@ -8,6 +8,7 @@ public class DropperController : MonoBehaviour
     [Header("UI References")]
     public Image currentJellyfishImage;          // Sứa hiện tại trong dropper (sắp thả)
     public Image nextJellyfishImage;             // Sứa tiếp theo (preview ở góc)
+    public Text scoreText;
 
     [Header("Movement Settings")]
     public float minX = -300f;                   
@@ -17,8 +18,7 @@ public class DropperController : MonoBehaviour
     [Header("Drop Settings")]
     public Transform spawnPoint;                 
     public float dropCooldown = 0.5f;            
-    public KeyCode dropKey = KeyCode.Space;      
-
+    public KeyCode dropKey = KeyCode.Space;
     private bool canMove = false;
     private bool canDrop = true;
     private Canvas parentCanvas;
@@ -44,15 +44,26 @@ public class DropperController : MonoBehaviour
     {
         parentCanvas = GetComponentInParent<Canvas>();
         
+        // ẨN Score và NextJelly ban đầu
+        if (nextJellyfishImage != null)
+        {
+            nextJellyfishImage.gameObject.SetActive(false);
+        }
+        if (scoreText != null)
+        {
+            scoreText.gameObject.SetActive(false);
+        }
+
+        // ĐẶT DROPPER NGOÀI CAMERA (Y rất cao)
         if (rectTransform != null)
         {
             Vector2 pos = rectTransform.anchoredPosition;
-            pos.y = dropperY;
+            pos.y = dropperY + 700f; // Ngoài camera
             pos.x = 0;
             rectTransform.anchoredPosition = pos;
         }
 
-        Debug.Log("DropperController ready");
+        Debug.Log("DropperController ready - waiting for start signal");
     }
 
     private void Update()
@@ -86,22 +97,28 @@ public class DropperController : MonoBehaviour
     {
         Debug.Log("StartDropperSequence called!");
         
+        // HIỆN Score và NextJelly
+        if (nextJellyfishImage != null)
+        {
+            nextJellyfishImage.gameObject.SetActive(true);
+        }
+        if (scoreText != null)
+        {
+            scoreText.gameObject.SetActive(true);
+        }
+
         // Load current jellyfish TRƯỚC (để có sprite và scale)
         LoadCurrentJellyfish();
         
-        // Animation dropper xuất hiện từ ngoài camera (Y cao hơn)
+        // Animation dropper đi xuống BÌNH THƯỜNG (không nhún)
         if (rectTransform != null)
         {
-            Vector2 startPos = rectTransform.anchoredPosition;
-            startPos.y = dropperY + 500f; // Bắt đầu từ ngoài camera
-            rectTransform.anchoredPosition = startPos;
-
-            // Tween xuống vị trí dropperY
-            rectTransform.DOAnchorPosY(dropperY, 0.5f).SetEase(Ease.OutBack);
+            // Đang ở ngoài camera, đi xuống vị trí dropperY
+            rectTransform.DOAnchorPosY(dropperY, 0.6f).SetEase(Ease.OutQuad);
         }
 
         // Cho phép di chuyển sau animation
-        DOVirtual.DelayedCall(0.5f, () => 
+        DOVirtual.DelayedCall(0.6f, () => 
         { 
             canMove = true;
             Debug.Log("Can move now!");
@@ -117,7 +134,6 @@ public class DropperController : MonoBehaviour
         }
 
         int currentLevel = GameManager.Instance.currentJellyfishLevel;
-
         Debug.Log($"Loading CURRENT jellyfish level: {currentLevel}");
 
         // Lấy thông tin từ prefab
@@ -129,18 +145,20 @@ public class DropperController : MonoBehaviour
                 SpriteRenderer sr = prefab.GetComponent<SpriteRenderer>();
                 if (sr != null)
                 {
-                    // CACHE sprite và scale
+                    // CACHE sprite và scale GỐC từ prefab
                     cachedCurrentSprite = sr.sprite;
                     cachedCurrentScale = prefab.transform.localScale;
 
-                    Debug.Log($"Cached current jelly: {cachedCurrentSprite.name}, scale: {cachedCurrentScale}");
+                    Debug.Log($"Cached current: {cachedCurrentSprite.name}, scale: {cachedCurrentScale}");
 
-                    // Hiển thị sprite
+                    // Hiển thị trong CurrentJelly
                     if (currentJellyfishImage != null)
                     {
                         currentJellyfishImage.sprite = cachedCurrentSprite;
+                        currentJellyfishImage.preserveAspect = true;
+                        currentJellyfishImage.SetNativeSize(); // Set size theo sprite
                         
-                        // ANIMATION: Scale từ 0 lên scale của prefab
+                        // ANIMATION: Scale từ 0 lên scale GỐC của prefab
                         currentJellyfishImage.transform.localScale = Vector3.zero;
                         currentJellyfishImage.transform.DOScale(cachedCurrentScale, 0.4f).SetEase(Ease.OutBack);
                     }
@@ -157,7 +175,6 @@ public class DropperController : MonoBehaviour
         if (GameManager.Instance == null || nextJellyfishImage == null) return;
 
         int previewLevel = GameManager.Instance.nextJellyfishLevel;
-        
         Debug.Log($"Updating NEXT jellyfish preview level: {previewLevel}");
 
         if (previewLevel >= 0 && previewLevel < GameManager.Instance.jellyfishPrefabs.Length)
@@ -170,11 +187,15 @@ public class DropperController : MonoBehaviour
                 {
                     nextJellyfishImage.sprite = sr.sprite;
                     
-                    // Next jelly nhỏ hơn 20%
+                    // Set size native
                     Vector3 prefabScale = prefab.transform.localScale;
-                    nextJellyfishImage.transform.localScale = prefabScale * 0.8f;
+                    ImageSizeHelper.SetNativeSize(nextJellyfishImage, sr.sprite, prefabScale);
                     
-                    Debug.Log($"Updated next jelly preview: {sr.sprite.name}");
+                    // ANIMATION: Scale từ 0 lên scale gốc
+                    nextJellyfishImage.transform.localScale = Vector3.zero;
+                    nextJellyfishImage.transform.DOScale(prefabScale, 0.3f).SetEase(Ease.OutBack);
+                    
+                    Debug.Log($"Updated next preview: {sr.sprite.name}, scale: {prefabScale}");
                 }
             }
         }

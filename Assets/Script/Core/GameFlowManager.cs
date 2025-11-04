@@ -32,6 +32,7 @@ public class GameFlowManager : MonoBehaviour
             {
                 menuCanvasGroup = menuCanvas.gameObject.AddComponent<CanvasGroup>();
             }
+            menuCanvasGroup.alpha = 1;
         }
 
         if (readyCanvas != null)
@@ -41,9 +42,10 @@ public class GameFlowManager : MonoBehaviour
             {
                 readyCanvasGroup = readyCanvas.gameObject.AddComponent<CanvasGroup>();
             }
+            readyCanvasGroup.alpha = 1;
         }
 
-        // TẮT HẾT VIDEO TRƯỚC
+        // TẮT HẾT VIDEO VÀ CANVAS TRƯỚC
         if (menuVideo != null) 
         {
             menuVideo.Stop();
@@ -60,21 +62,29 @@ public class GameFlowManager : MonoBehaviour
             gameplayVideo.gameObject.SetActive(false);
         }
 
-        // Setup ban đầu - CHỈ BẬT MENU
+        // TẮT TẤT CẢ CANVAS
+        if (menuCanvas != null) menuCanvas.gameObject.SetActive(false);
+        if (readyCanvas != null) readyCanvas.gameObject.SetActive(false);
+        if (gameCanvas != null) gameCanvas.gameObject.SetActive(false);
+
+        // CHỈ BẬT MENU
         if (menuVideo != null) 
         {
             menuVideo.gameObject.SetActive(true);
-            menuVideo.targetCameraAlpha = 1f;
             menuVideo.transform.position = new Vector3(0, 0, 100);
             menuVideo.transform.localScale = Vector3.one;
+            menuVideo.targetCameraAlpha = 1f;
             menuVideo.Play();
+            Debug.Log("Menu video started");
         }
         
         if (audioManager != null) audioManager.PlayMenuMusic();
         
-        if (menuCanvas != null) menuCanvas.gameObject.SetActive(true);
-        if (readyCanvas != null) readyCanvas.gameObject.SetActive(false);
-        if (gameCanvas != null) gameCanvas.gameObject.SetActive(false);
+        if (menuCanvas != null) 
+        {
+            menuCanvas.gameObject.SetActive(true);
+            Debug.Log("Menu canvas activated");
+        }
     }
 
     public void OnStartGamePressed()
@@ -202,6 +212,42 @@ public class GameFlowManager : MonoBehaviour
                 }
             });
         });
+    }
+
+    public void ExitToMenu()
+    {
+        Debug.Log("=== EXIT TO MENU ===");
+        
+        // Lưu điểm
+        GameManager.Instance.ExitToMenu();
+        
+        // Spawn particle
+        if (bubblesParticlePrefab != null)
+        {
+            GameObject particle = Instantiate(bubblesParticlePrefab);
+            particle.transform.position = new Vector3(0, -8.7f, -1);
+        }
+
+        // Tắt gameplay
+        if (gameCanvas != null) gameCanvas.gameObject.SetActive(false);
+        if (gameplayVideo != null)
+        {
+            gameplayVideo.Stop();
+            gameplayVideo.gameObject.SetActive(false);
+        }
+
+        // Bật menu
+        if (menuVideo != null)
+        {
+            menuVideo.gameObject.SetActive(true);
+            menuVideo.transform.position = new Vector3(0, 0, 100);
+            menuVideo.transform.localScale = Vector3.one;
+            menuVideo.targetCameraAlpha = 1f;
+            menuVideo.Play();
+        }
+        
+        if (menuCanvas != null) menuCanvas.gameObject.SetActive(true);
+        if (audioManager != null) audioManager.PlayMenuMusic();
     }
 
     private void OnDestroy()
