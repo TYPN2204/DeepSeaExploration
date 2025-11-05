@@ -14,9 +14,12 @@ public class GameFlowManager : MonoBehaviour
     public Canvas readyCanvas;
     public Canvas gameCanvas;
     
-    [Header("Effects & Audio")]
-    public GameObject bubblesParticlePrefab;
+    [Header("Managers")]
     public AudioManager audioManager;
+    private GameOverManager gameOverManager; 
+    
+    [Header("Effects")]
+    public GameObject bubblesParticlePrefab;
     public Camera mainCamera;
 
     private CanvasGroup menuCanvasGroup;
@@ -24,45 +27,28 @@ public class GameFlowManager : MonoBehaviour
 
     private void Start()
     {
-        // Thêm CanvasGroup
+        gameOverManager = FindObjectOfType<GameOverManager>();
+
         if (menuCanvas != null)
         {
             menuCanvasGroup = menuCanvas.GetComponent<CanvasGroup>();
             if (menuCanvasGroup == null)
-            {
                 menuCanvasGroup = menuCanvas.gameObject.AddComponent<CanvasGroup>();
-            }
             menuCanvasGroup.alpha = 1;
         }
-
         if (readyCanvas != null)
         {
             readyCanvasGroup = readyCanvas.GetComponent<CanvasGroup>();
             if (readyCanvasGroup == null)
-            {
                 readyCanvasGroup = readyCanvas.gameObject.AddComponent<CanvasGroup>();
-            }
             readyCanvasGroup.alpha = 1;
         }
 
         // TẮT HẾT VIDEO VÀ CANVAS TRƯỚC
-        if (menuVideo != null) 
-        {
-            menuVideo.Stop();
-            menuVideo.gameObject.SetActive(false);
-        }
-        if (readyVideo != null) 
-        {
-            readyVideo.Stop();
-            readyVideo.gameObject.SetActive(false);
-        }
-        if (gameplayVideo != null) 
-        {
-            gameplayVideo.Stop();
-            gameplayVideo.gameObject.SetActive(false);
-        }
-
-        // TẮT TẤT CẢ CANVAS
+        if (menuVideo != null) { menuVideo.Stop(); menuVideo.gameObject.SetActive(false); }
+        if (readyVideo != null) { readyVideo.Stop(); readyVideo.gameObject.SetActive(false); }
+        if (gameplayVideo != null) { gameplayVideo.Stop(); gameplayVideo.gameObject.SetActive(false); }
+        
         if (menuCanvas != null) menuCanvas.gameObject.SetActive(false);
         if (readyCanvas != null) readyCanvas.gameObject.SetActive(false);
         if (gameCanvas != null) gameCanvas.gameObject.SetActive(false);
@@ -83,7 +69,21 @@ public class GameFlowManager : MonoBehaviour
         if (menuCanvas != null) 
         {
             menuCanvas.gameObject.SetActive(true);
+            if(menuCanvasGroup != null) menuCanvasGroup.alpha = 1; 
             Debug.Log("Menu canvas activated");
+        }
+    }
+
+    public void SpawnBubbles()
+    {
+        if (bubblesParticlePrefab != null)
+        {
+            GameObject particle = Instantiate(bubblesParticlePrefab);
+            particle.transform.position = new Vector3(0, -8.7f, -1);
+        }
+        if (audioManager != null)
+        {
+            audioManager.PlayBubbleSound();
         }
     }
 
@@ -91,7 +91,6 @@ public class GameFlowManager : MonoBehaviour
     {
         Debug.Log("=== TRANSITION: Menu → Ready ===");
         
-        // BẬT READY VIDEO NGAY (phía sau menu)
         if (readyVideo != null) 
         {
             readyVideo.gameObject.SetActive(true);
@@ -105,29 +104,21 @@ public class GameFlowManager : MonoBehaviour
             readyCanvas.gameObject.SetActive(true);
         }
 
-        // Spawn particle bọt biển tại Y = -8.7
-        if (bubblesParticlePrefab != null)
-        {
-            GameObject particle = Instantiate(bubblesParticlePrefab);
-            particle.transform.position = new Vector3(0, -8.7f, -1);
-        }
-
+        SpawnBubbles();
         if (audioManager != null) audioManager.PlayGameplayMusic();
 
-        // HIỆU ỨNG: Menu video fade out + scale to 1.2x
+        // (Code fade out Menu Video/Canvas giữ nguyên)
         Sequence menuTransition = DOTween.Sequence();
-        
+        float fadeDuration = 0.3f; 
         if (menuVideo != null)
         {
-            // Fade alpha từ 1 → 0
-            menuTransition.Join(DOTween.To(() => menuVideo.targetCameraAlpha, 
-                                          x => menuVideo.targetCameraAlpha = x, 
-                                          0f, 0.5f));
-            
-            // Scale từ 1 → 1.2
-            menuTransition.Join(menuVideo.transform.DOScale(1.2f, 0.5f));
+            menuTransition.Join(DOTween.To(() => menuVideo.targetCameraAlpha, x => menuVideo.targetCameraAlpha = x, 0f, fadeDuration));
+            menuTransition.Join(menuVideo.transform.DOScale(1.2f, fadeDuration));
         }
-
+        if (menuCanvasGroup != null)
+        {
+            menuTransition.Join(menuCanvasGroup.DOFade(0f, fadeDuration));
+        }
         menuTransition.OnComplete(() =>
         {
             if (menuCanvas != null) menuCanvas.gameObject.SetActive(false);
@@ -135,13 +126,11 @@ public class GameFlowManager : MonoBehaviour
             {
                 menuVideo.Stop();
                 menuVideo.gameObject.SetActive(false);
-                // Reset lại cho lần sau
                 menuVideo.transform.localScale = Vector3.one;
                 menuVideo.targetCameraAlpha = 1f;
             }
         });
 
-        // Đăng ký event
         if (readyVideo != null)
         {
             readyVideo.loopPointReached += OnReadyVideoEnd;
@@ -153,41 +142,37 @@ public class GameFlowManager : MonoBehaviour
         Debug.Log("=== TRANSITION: Ready → Gameplay ===");
         vp.loopPointReached -= OnReadyVideoEnd;
 
-        // BẬT GAMEPLAY VIDEO tại vị trí dưới (0, -10, 80)
         if (gameplayVideo != null) 
         {
             gameplayVideo.gameObject.SetActive(true);
-            gameplayVideo.targetCameraAlpha = 1f;
+            gameplayVideo.targetCameraAlpha = 0f; 
             gameplayVideo.transform.position = new Vector3(0, -10, 80);
             gameplayVideo.Play();
         }
         
         if (gameCanvas != null) gameCanvas.gameObject.SetActive(true);
 
-        // Spawn particle tại Y = -8.7
-        if (bubblesParticlePrefab != null)
+        // SỬA LỖI 2: Ẩn UI của game trước khi delay
+        DropperController dropper = FindObjectOfType<DropperController>();
+        if (dropper != null)
         {
-            GameObject particle = Instantiate(bubblesParticlePrefab);
-            particle.transform.position = new Vector3(0, -8.7f, -1);
+            dropper.ResetDropper(); // Ẩn UI ngay lập tức
         }
+        
+        SpawnBubbles();
 
-        // HIỆU ỨNG ĐỒNG THỜI
+        // (Code cross-fade 2 video giữ nguyên)
         Sequence transition = DOTween.Sequence();
-
-        // 1. Ready fade out + move lên (0,0,90) → (0,10,90)
+        float transitionDuration = 0.7f; 
         if (readyVideo != null)
         {
-            transition.Join(DOTween.To(() => readyVideo.targetCameraAlpha, 
-                                      x => readyVideo.targetCameraAlpha = x, 
-                                      0f, 0.7f));
-            
-            transition.Join(readyVideo.transform.DOMoveY(10f, 0.7f));
+            transition.Join(DOTween.To(() => readyVideo.targetCameraAlpha, x => readyVideo.targetCameraAlpha = x, 0f, transitionDuration));
+            transition.Join(readyVideo.transform.DOMoveY(10f, transitionDuration));
         }
-
-        // 2. Gameplay move lên (0,-10,80) → (0,0,80)
         if (gameplayVideo != null)
         {
-            transition.Join(gameplayVideo.transform.DOMoveY(0f, 0.7f));
+            transition.Join(gameplayVideo.transform.DOMoveY(0f, transitionDuration));
+            transition.Join(DOTween.To(() => gameplayVideo.targetCameraAlpha, x => gameplayVideo.targetCameraAlpha = x, 1f, transitionDuration));
         }
 
         transition.OnComplete(() =>
@@ -197,15 +182,19 @@ public class GameFlowManager : MonoBehaviour
             {
                 readyVideo.Stop();
                 readyVideo.gameObject.SetActive(false);
-                // Reset lại
                 readyVideo.transform.position = new Vector3(0, 0, 90);
                 readyVideo.targetCameraAlpha = 1f;
             }
 
-            // SAU 3 GIÂY mới kích hoạt dropper
+            // SỬA LỖI 2/3: Delay 3 giây, SAU ĐÓ mới reset game VÀ BẬT dropper
             DOVirtual.DelayedCall(3f, () =>
             {
-                DropperController dropper = FindObjectOfType<DropperController>();
+                if(GameManager.Instance != null)
+                {
+                    GameManager.Instance.StartGame();
+                }
+                
+                // (dropper đã được tìm thấy ở trên)
                 if (dropper != null)
                 {
                     dropper.StartDropperSequence();
@@ -218,17 +207,24 @@ public class GameFlowManager : MonoBehaviour
     {
         Debug.Log("=== EXIT TO MENU ===");
         
-        // Lưu điểm
-        GameManager.Instance.ExitToMenu();
-        
-        // Spawn particle
-        if (bubblesParticlePrefab != null)
+        if (gameOverManager != null)
         {
-            GameObject particle = Instantiate(bubblesParticlePrefab);
-            particle.transform.position = new Vector3(0, -8.7f, -1);
+            gameOverManager.HideGameOver(true); // Ẩn ngay lập tức
+        }
+        
+        if(GameManager.Instance != null)
+        {
+            GameManager.Instance.ExitToMenu();
+        }
+        
+        DropperController dropper = FindObjectOfType<DropperController>();
+        if (dropper != null)
+        {
+            dropper.ResetDropper();
         }
 
-        // Tắt gameplay
+        SpawnBubbles(); 
+
         if (gameCanvas != null) gameCanvas.gameObject.SetActive(false);
         if (gameplayVideo != null)
         {
@@ -246,10 +242,20 @@ public class GameFlowManager : MonoBehaviour
             menuVideo.Play();
         }
         
-        if (menuCanvas != null) menuCanvas.gameObject.SetActive(true);
+        if (menuCanvas != null) 
+        {
+            menuCanvas.gameObject.SetActive(true);
+            if (menuCanvasGroup != null)
+            {
+                menuCanvasGroup.alpha = 1;
+                menuCanvasGroup.interactable = true;
+                menuCanvasGroup.blocksRaycasts = true;
+            }
+        }
         if (audioManager != null) audioManager.PlayMenuMusic();
     }
 
+    // SỬA LỖI (Ảnh): Thêm kiểm tra "null"
     private void OnDestroy()
     {
         if (readyVideo != null)

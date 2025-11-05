@@ -1,120 +1,129 @@
 using UnityEngine;
+using System.Collections;
 using DG.Tweening;
 
 public class Jellyfish : MonoBehaviour
 {
-    public int jellyLevel;
-    private bool hasMerged = false; // Tránh merge nhiều lần
+    [Header("Data")]
+    public int jellyLevel; 
 
-    private void OnCollisionEnter2D(Collision2D collision)
+    private bool hasMerged = false;
+    private Rigidbody2D rb;
+
+    void Awake()
     {
-        // Kiểm tra va chạm với jellyfish khác
-        Jellyfish other = collision.gameObject.GetComponent<Jellyfish>();
+        // SỬA LỖI (Ảnh): Dùng GetComponentInChildren để tìm Rigidbody2D ở con
+        rb = GetComponentInChildren<Rigidbody2D>();
         
-        if (other != null && !hasMerged && !other.hasMerged)
+        if (rb != null)
         {
-            // Chỉ merge nếu cùng level
-            if (other.jellyLevel == this.jellyLevel)
+            rb.isKinematic = false;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        }
+        else
+        {
+            // Báo lỗi nếu không tìm thấy Rigidbody2D
+            Debug.LogError($"Jellyfish {gameObject.name} không tìm thấy Rigidbody2D ở con!");
+        }
+    }
+
+    public IEnumerator SettleCheck(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        if (GameManager.MergingCoroutines > 0)
+        {
+            GameManager.MergingCoroutines--;
+        }
+        Debug.Log($"SettleCheck complete. Merging count: {GameManager.MergingCoroutines}");
+    }
+
+    public void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (hasMerged) return;
+        Jellyfish other = collision.gameObject.GetComponent<Jellyfish>();
+
+        if (other != null && other.jellyLevel == this.jellyLevel && !other.hasMerged)
+        {
+            if (this.GetInstanceID() < other.GetInstanceID())
             {
-                // Tính vị trí trung điểm
-                Vector3 mergePosition = (transform.position + other.transform.position) / 2f;
-                
-                Debug.Log($"Merging 2 jellyfish level {jellyLevel} at {mergePosition}");
-                
-                // Đánh dấu đã merge
-                hasMerged = true;
-                other.hasMerged = true;
-                
-                // Thực hiện merge
-                MergeWith(other, mergePosition);
+                StartCoroutine(MergeAnimation(other));
             }
         }
     }
 
-    public void MergeWith(Jellyfish other, Vector3 mergePosition)
+    IEnumerator MergeAnimation(Jellyfish other)
     {
-        // Disable physics
-        Rigidbody2D rb = GetComponent<Rigidbody2D>();
-        if (rb != null) rb.simulated = false;
+        this.hasMerged = true;
+        other.hasMerged = true;
+
+        GameManager.MergingCoroutines++;
+        Debug.Log($"Merge started. Merging count: {GameManager.MergingCoroutines}");
+
+        if (rb != null) rb.isKinematic = true;
         
-        Rigidbody2D otherRb = other.GetComponent<Rigidbody2D>();
-        if (otherRb != null) otherRb.simulated = false;
-
-        // Tính điểm
-        int scoreGained = 100 * (jellyLevel + 1);
-        GameManager.Instance.UpdateScore(scoreGained);
-
-        // ANIMATION MERGE (chậm hơn để dễ nhìn)
-        float mergeDuration = 0.4f;
-
-        Sequence mergeSeq = DOTween.Sequence();
+        // SỬA LỖI: Phải tìm Rigidbody của "other"
+        Rigidbody2D otherRb = other.GetComponentInChildren<Rigidbody2D>();
+        if (otherRb != null) otherRb.isKinematic = true;
         
-        // Cả 2 jellyfish di chuyển về trung điểm + thu nhỏ về 0
-        mergeSeq.Join(transform.DOMove(mergePosition, mergeDuration).SetEase(Ease.InOutQuad));
-        mergeSeq.Join(transform.DOScale(0, mergeDuration).SetEase(Ease.InBack));
+        // SỬA LỖI: Tìm Collider ở con
+        Collider2D col = GetComponentInChildren<Collider2D>();
+        if (col != null) col.enabled = false;
         
-        mergeSeq.Join(other.transform.DOMove(mergePosition, mergeDuration).SetEase(Ease.InOutQuad));
-        mergeSeq.Join(other.transform.DOScale(0, mergeDuration).SetEase(Ease.InBack));
-        
-        mergeSeq.OnComplete(() =>
-        {
-            Destroy(gameObject);
-            Destroy(other.gameObject);
-        });
+        Collider2D otherCol = other.GetComponentInChildren<Collider2D>();
+        if (otherCol != null) otherCol.enabled = false;
 
-        // Spawn jellyfish mới SAU KHI animation gần xong
-        DOVirtual.DelayedCall(mergeDuration * 0.6f, () =>
-        {
-            SpawnMergedJellyfish(mergePosition, jellyLevel + 1);
-        });
-    }
+        Transform higherJelly = (transform.position.y > other.transform.position.y) ? this.transform : other.transform;
+        Transform lowerJelly = (higherJelly == this.transform) ? other.transform : this.transform;
+        Vector3 mergePosition = lowerJelly.position;
 
-    private void SpawnMergedJellyfish(Vector3 position, int newLevel)
-    {
-        if (newLevel >= GameManager.Instance.jellyfishPrefabs.Length)
-        {
-            Debug.Log("Max level reached!");
-            return;
-        }
+        float animTime = 0.4f; // Giữ nguyên 0.4s
 
-        // Spawn jellyfish mới
-        GameObject newJellyObj = Instantiate(GameManager.Instance.jellyfishPrefabs[newLevel], position, Quaternion.identity);
-        Jellyfish newJelly = newJellyObj.GetComponent<Jellyfish>();
-        
-        if (newJelly != null)
-        {
-            newJelly.jellyLevel = newLevel;
-        }
+        higherJelly.DOMove(mergePosition, animTime).SetEase(Ease.InQuad);
+        transform.DOScale(Vector3.zero, animTime).SetEase(Ease.InBack);
+        other.transform.DOScale(Vector3.zero, animTime).SetEase(Ease.InBack);
 
-        // Lấy scale gốc từ prefab
-        Vector3 targetScale = GameManager.Instance.jellyfishPrefabs[newLevel].transform.localScale;
-
-        // ANIMATION: Scale từ 0 → overshoot → target (bong bóng núng nính)
-        newJellyObj.transform.localScale = Vector3.zero;
-        newJellyObj.transform.DOScale(targetScale * 1.15f, 0.25f).SetEase(Ease.OutBack).OnComplete(() =>
+        if (GameManager.Instance != null)
         {
-            // Co lại về scale bình thường
-            newJellyObj.transform.DOScale(targetScale, 0.15f).SetEase(Ease.InOutQuad).OnComplete(() =>
+            if (GameManager.Instance.audioManager != null)
             {
-                // Đung đưa nhẹ
-                newJellyObj.transform.DOPunchRotation(new Vector3(0, 0, 8), 0.4f, 8, 0.5f);
-            });
-        });
-
-        // HIỆU ỨNG PHÁT SÁNG (tăng brightness sprite)
-        SpriteRenderer sr = newJellyObj.GetComponent<SpriteRenderer>();
-        if (sr != null)
-        {
-            // Lưu màu gốc
-            Color originalColor = sr.color;
+                GameManager.Instance.audioManager.PlayMergeSound(this.jellyLevel);
+            }
             
-            // Phát sáng: Tăng brightness (color * 2)
-            sr.color = originalColor * 2f;
-            
-            // Về màu bình thường
-            sr.DOColor(originalColor, 0.5f).SetEase(Ease.OutQuad);
+            int scoreGained = (this.jellyLevel + 1) * 10;
+            GameManager.Instance.UpdateScore(scoreGained);
         }
 
-        Debug.Log($"Spawned merged jellyfish level {newLevel}");
+        yield return new WaitForSeconds(animTime);
+
+        if (GameManager.Instance != null)
+        {
+            int newLevel = this.jellyLevel + 1;
+            if (newLevel < GameManager.Instance.jellyfishPrefabs.Length)
+            {
+                GameManager.MergingCoroutines++;
+                Debug.Log($"Spawning new jelly. Merging count: {GameManager.MergingCoroutines}");
+
+                GameObject newJellyObj = GameManager.Instance.SpawnJellyfish(mergePosition, newLevel, true);
+                
+                if(newJellyObj != null)
+                {
+                    Jellyfish newJellyScript = newJellyObj.GetComponent<Jellyfish>();
+                    if(newJellyScript != null)
+                    {
+                        newJellyScript.StartCoroutine(newJellyScript.SettleCheck(0.5f));
+                    }
+                }
+            }
+        }
+        
+        if (GameManager.MergingCoroutines > 0)
+        {
+            GameManager.MergingCoroutines--;
+        }
+        Debug.Log($"Merge anim complete. Merging count: {GameManager.MergingCoroutines}");
+
+        Destroy(gameObject);
+        Destroy(other.gameObject);
     }
 }

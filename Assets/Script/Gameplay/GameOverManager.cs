@@ -1,339 +1,138 @@
 using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
-using System.Collections.Generic;
 
+// GẮN SCRIPT NÀY VÀO CANVAS_GAMEOVER HOẶC 1 OBJECT QUẢN LÝ
 public class GameOverManager : MonoBehaviour
 {
-    [Header("Game Over UI")]
-    public CanvasGroup gameOverOverlay;     // Nền đen
-    public Image gameOverImage;             // Ảnh GAME OVER
-    public GameObject scorePanelRoot;       // Panel bên trái
-    public GameObject leaderboardPanelRoot; // Panel bên phải
-    public Text currentScoreText;           // Điểm hiện tại
-    public GameObject bubblesParticlePrefab;
+    [Header("Main Canvas (Kéo vào)")]
+    public Canvas gameOverCanvas; // (Lỗi 2) Kéo Canvas_GameOver vào đây
 
-    [Header("Leaderboard")]
-    public RankingEntry[] rankingEntries;   // 5 entries (1st-5th)
+    [Header("UI Components (Kéo vào)")]
+    public Image gameOverImage;         
+    public Text currentScoreText;       
+    public Text highestScoreText;       
+    public Button retryButton;          
+    
+    private CanvasGroup canvasGroup;
+    private GameFlowManager gameFlowManager;
 
-    [System.Serializable]
-    public class RankingEntry
+    void Awake()
     {
-        public GameObject root;
-        public Image background;
-        public Text rankText;
-        public Text nameText;
-        public Text scoreText;
-    }
+        gameFlowManager = FindObjectOfType<GameFlowManager>();
 
-    private Leaderboard leaderboard;
-
-    private void Awake()
-    {
-        leaderboard = new Leaderboard();
-        
-        // Ẩn game over UI ban đầu
-        if (gameOverOverlay != null)
+        if (gameOverCanvas == null)
         {
-            gameOverOverlay.alpha = 0;
-            gameOverOverlay.gameObject.SetActive(false);
+            // Nếu không gán, thử tự lấy
+            gameOverCanvas = GetComponent<Canvas>();
+            if (gameOverCanvas == null)
+            {
+                Debug.LogError("GameOverCanvas chưa được gán!");
+                return;
+            }
         }
+
+        // Tự động tìm/thêm CanvasGroup
+        canvasGroup = gameOverCanvas.GetComponent<CanvasGroup>();
+        if (canvasGroup == null)
+        {
+            canvasGroup = gameOverCanvas.gameObject.AddComponent<CanvasGroup>();
+        }
+        
+        if (retryButton != null)
+        {
+            retryButton.onClick.RemoveAllListeners();
+            retryButton.onClick.AddListener(OnRetryPressed);
+        }
+
+        // Ẩn UI lúc bắt đầu
+        HideGameOver(true);
     }
 
+    // Được gọi bởi GameManager.TriggerGameOver()
     public void ShowGameOver(int finalScore)
     {
-        Debug.Log($"ShowGameOver called with score: {finalScore}");
-        
-        // DISABLE DROPPER (không cho thả nữa)
-        DropperController dropper = FindObjectOfType<DropperController>();
-        if (dropper != null)
+        if (gameOverCanvas == null) return;
+
+        // 1. Tắt Gameplay Canvas
+        if (GameManager.Instance != null && GameManager.Instance.gameCanvas != null)
         {
-            dropper.enabled = false; // Tắt script
+            GameManager.Instance.gameCanvas.gameObject.SetActive(false);
         }
 
-        // Spawn particle
-        if (bubblesParticlePrefab != null)
+        // 2. Chạy hiệu ứng bọt biển
+        if (gameFlowManager != null)
         {
-            GameObject particle = Instantiate(bubblesParticlePrefab);
-            particle.transform.position = new Vector3(0, -8.7f, -1);
+            gameFlowManager.SpawnBubbles();
         }
 
-        // Hiện overlay với nền ĐEN
-        if (gameOverOverlay != null)
-        {
-            gameOverOverlay.gameObject.SetActive(true);
-            gameOverOverlay.alpha = 0;
-            
-            // Fade to alpha = 125/255 = 0.49
-            gameOverOverlay.DOFade(0.49f, 0.5f);
-            
-            // Đảm bảo overlay block input
-            gameOverOverlay.blocksRaycasts = true;
-            gameOverOverlay.interactable = true;
-        }
-
-        // Animation GAME OVER image
-        if (gameOverImage != null)
-        {
-            gameOverImage.transform.position = Vector3.zero;
-            gameOverImage.transform.localScale = Vector3.one;
-            
-            // Thu nhỏ + di chuyển
-            Sequence gameOverSeq = DOTween.Sequence();
-            gameOverSeq.Append(gameOverImage.transform.DOScale(0.8f, 0.3f));
-            gameOverSeq.Join(gameOverImage.transform.DOMove(new Vector3(-2.5f, 2.5f, 0), 0.3f));
-            
-            gameOverSeq.OnComplete(() =>
-            {
-                // Hiện score panel
-                ShowScorePanel(finalScore);
-                
-                // Hiện leaderboard
-                ShowLeaderboard(finalScore);
-            });
-        }
-    }
-
-    private void ShowScorePanel(int score)
-    {
-        if (scorePanelRoot != null)
-        {
-            scorePanelRoot.SetActive(true);
-            CanvasGroup cg = scorePanelRoot.GetComponent<CanvasGroup>();
-            if (cg == null) cg = scorePanelRoot.AddComponent<CanvasGroup>();
-            
-            cg.alpha = 0;
-            cg.DOFade(1, 0.5f);
-        }
-
+        // 3. Cập nhật Text
         if (currentScoreText != null)
         {
-            currentScoreText.text = score.ToString();
+            currentScoreText.text = finalScore.ToString();
+        }
+        
+        int highScore = PlayerPrefs.GetInt("Highscore", 0);
+        if (highestScoreText != null)
+        {
+            highestScoreText.text = highScore.ToString();
+        }
+
+        // 4. Chuẩn bị UI Game Over (Ẩn)
+        if (gameOverImage != null)
+        {
+            Color imgColor = gameOverImage.color;
+            imgColor.a = 0f;
+            gameOverImage.color = imgColor;
+        }
+        
+        canvasGroup.alpha = 0f;
+        gameOverCanvas.gameObject.SetActive(true); // Bật GameObject
+
+        // 5. Chạy animation Fade In
+        canvasGroup.DOFade(1f, 0.4f).SetEase(Ease.OutQuad);
+        canvasGroup.interactable = true;
+        canvasGroup.blocksRaycasts = true;
+
+        if (gameOverImage != null)
+        {
+            float targetAlpha = 230f / 255f; // Alpha 230
+            gameOverImage.DOFade(targetAlpha, 0.5f).SetEase(Ease.OutQuad).SetDelay(0.1f);
         }
     }
 
-    private void ShowLeaderboard(int newScore)
+    // Nút "Chơi Lại" (Retry)
+    private void OnRetryPressed()
     {
-        if (leaderboardPanelRoot != null)
+        Debug.Log("Retry Button Pressed - Exiting to Menu...");
+        
+        // SỬA (Lỗi 3): Nút retry gọi ExitToMenu
+        // ExitToMenu sẽ (1) Ẩn GameOver, (2) Chạy bọt biển, (3) Về Menu
+        if (gameFlowManager != null)
         {
-            leaderboardPanelRoot.SetActive(true);
+            gameFlowManager.ExitToMenu();
         }
+    }
 
-        // Load leaderboard
-        leaderboard.LoadFromPlayerPrefs();
+    // Ẩn UI Game Over
+    public void HideGameOver(bool immediate = false)
+    {
+        if (gameOverCanvas == null || canvasGroup == null) return;
         
-        // Thêm điểm mới
-        int newRank = leaderboard.AddScore("Player", newScore);
-        
-        // Lưu lại
-        leaderboard.SaveToPlayerPrefs();
+        canvasGroup.interactable = false;
+        canvasGroup.blocksRaycasts = false;
 
-        // Hiển thị với animation
-        if (newRank >= 0)
+        if (immediate)
         {
-            ShowLeaderboardWithAnimation(newRank);
+            canvasGroup.alpha = 0f;
+            gameOverCanvas.gameObject.SetActive(false);
         }
         else
         {
-            ShowLeaderboardNormal();
-        }
-    }
-
-    private void ShowLeaderboardNormal()
-    {
-        // Hiện tất cả entries không animation
-        for (int i = 0; i < rankingEntries.Length && i < leaderboard.entries.Count; i++)
-        {
-            UpdateRankingEntry(i, leaderboard.entries[i]);
-            
-            if (rankingEntries[i].root != null)
+            canvasGroup.DOFade(0f, 0.3f).OnComplete(() =>
             {
-                rankingEntries[i].root.SetActive(true);
-            }
+                gameOverCanvas.gameObject.SetActive(false);
+            });
         }
-    }
-
-    private void ShowLeaderboardWithAnimation(int newRank)
-    {
-        Sequence seq = DOTween.Sequence();
-
-        // Fade out các hàng cần update (từ newRank đến cuối)
-        for (int i = newRank; i < rankingEntries.Length; i++)
-        {
-            if (rankingEntries[i].root != null)
-            {
-                CanvasGroup cg = rankingEntries[i].root.GetComponent<CanvasGroup>();
-                if (cg == null) cg = rankingEntries[i].root.AddComponent<CanvasGroup>();
-                
-                seq.Append(cg.DOFade(0, 0.2f));
-            }
-        }
-
-        // Update data
-        seq.AppendCallback(() =>
-        {
-            for (int i = 0; i < rankingEntries.Length && i < leaderboard.entries.Count; i++)
-            {
-                UpdateRankingEntry(i, leaderboard.entries[i]);
-            }
-        });
-
-        // Fade in các hàng (trừ hàng mới)
-        for (int i = newRank; i < rankingEntries.Length; i++)
-        {
-            if (i == newRank) continue; // Bỏ qua hàng mới
-
-            if (rankingEntries[i].root != null)
-            {
-                CanvasGroup cg = rankingEntries[i].root.GetComponent<CanvasGroup>();
-                seq.Append(cg.DOFade(1, 0.2f));
-            }
-        }
-
-        // Hiện hàng mới với highlight
-        seq.AppendCallback(() =>
-        {
-            HighlightNewRank(newRank);
-        });
-    }
-
-    private void HighlightNewRank(int rank)
-    {
-        if (rank < 0 || rank >= rankingEntries.Length) return;
-
-        RankingEntry entry = rankingEntries[rank];
-        
-        // Fade in
-        CanvasGroup cg = entry.root.GetComponent<CanvasGroup>();
-        if (cg != null)
-        {
-            cg.alpha = 0;
-            cg.DOFade(1, 0.3f);
-        }
-
-        // Flash background (chỉ nếu có background)
-        if (entry.background != null)
-        {
-            Color originalColor = entry.background.color;
-            Color brightColor = originalColor * 2f;
-            
-            entry.background.color = brightColor;
-            entry.background.DOColor(originalColor, 1f).SetEase(Ease.OutQuad);
-        }
-        else
-        {
-            // Nếu không có background, flash text thay thế
-            if (entry.nameText != null)
-            {
-                Color originalColor = entry.nameText.color;
-                entry.nameText.color = Color.yellow;
-                entry.nameText.DOColor(originalColor, 1f);
-            }
-        }
-    }
-
-    private void UpdateRankingEntry(int index, Leaderboard.LeaderboardEntry data)
-    {
-        if (index >= rankingEntries.Length) return;
-
-        RankingEntry entry = rankingEntries[index];
-        
-        if (entry.rankText != null)
-        {
-            string[] ranks = { "1st", "2nd", "3rd", "4th", "5th" };
-            entry.rankText.text = index < ranks.Length ? ranks[index] : $"{index + 1}th";
-        }
-
-        if (entry.nameText != null)
-        {
-            entry.nameText.text = data.playerName;
-        }
-
-        if (entry.scoreText != null)
-        {
-            entry.scoreText.text = data.score.ToString();
-        }
-    }
-}
-
-// Leaderboard data structure
-public class Leaderboard
-{
-    [System.Serializable]
-    public class LeaderboardEntry
-    {
-        public string playerName;
-        public int score;
-
-        public LeaderboardEntry(string name, int score)
-        {
-            this.playerName = name;
-            this.score = score;
-        }
-    }
-
-    public List<LeaderboardEntry> entries = new List<LeaderboardEntry>();
-
-    public void LoadFromPlayerPrefs()
-    {
-        entries.Clear();
-        
-        for (int i = 0; i < 5; i++)
-        {
-            string name = PlayerPrefs.GetString($"Rank{i}_Name", "---");
-            int score = PlayerPrefs.GetInt($"Rank{i}_Score", 0);
-            
-            entries.Add(new LeaderboardEntry(name, score));
-        }
-    }
-
-    public void SaveToPlayerPrefs()
-    {
-        for (int i = 0; i < entries.Count && i < 5; i++)
-        {
-            PlayerPrefs.SetString($"Rank{i}_Name", entries[i].playerName);
-            PlayerPrefs.SetInt($"Rank{i}_Score", entries[i].score);
-        }
-        PlayerPrefs.Save();
-    }
-
-    // Thêm score mới, trả về rank (-1 nếu không lọt top 5)
-    public int AddScore(string playerName, int score)
-    {
-        // Tìm vị trí insert
-        int insertIndex = -1;
-        
-        for (int i = 0; i < entries.Count; i++)
-        {
-            if (score > entries[i].score)
-            {
-                insertIndex = i;
-                break;
-            }
-        }
-
-        // Không lọt top 5
-        if (insertIndex == -1 && entries.Count >= 5)
-        {
-            return -1;
-        }
-
-        // Insert vào vị trí phù hợp
-        if (insertIndex >= 0)
-        {
-            entries.Insert(insertIndex, new LeaderboardEntry(playerName, score));
-        }
-        else
-        {
-            entries.Add(new LeaderboardEntry(playerName, score));
-        }
-
-        // Giữ tối đa 5 entries
-        while (entries.Count > 5)
-        {
-            entries.RemoveAt(entries.Count - 1);
-        }
-
-        return insertIndex >= 0 ? insertIndex : entries.Count - 1;
     }
 }

@@ -2,37 +2,37 @@ using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
 
-// GẮNG SCRIPT NÀY VÀO CHÍNH DROPPER IMAGE OBJECT
 public class DropperController : MonoBehaviour
 {
     [Header("UI References")]
-    public Image currentJellyfishImage;          // Sứa hiện tại trong dropper (sắp thả)
-    public Image nextJellyfishImage;             // Sứa tiếp theo (preview ở góc)
+    public Image currentJellyfishImage;          
+    public Image nextJellyfishImage;             
     public Text scoreText;
 
     [Header("Movement Settings")]
-    public float minX = -300f;                   
-    public float maxX = 300f;                    
-    public float dropperY = 444.7f;              
+    public float minX = -300f; 
+    public float maxX = 300f;  
+    public float dropperY = 444.7f; 
 
     [Header("Drop Settings")]
-    public Transform spawnPoint;                 
-    public float dropCooldown = 0.5f;            
-    public KeyCode dropKey = KeyCode.Space;
-    private bool canMove = false;
-    private bool canDrop = true;
+    public Transform spawnPoint; 
+    
+    // SỬA LỖI 4/5: Đổi tên biến
+    private bool isDropperActive = false; // Tắt di chuyển/thả ban đầu
     private Canvas parentCanvas;
     private RectTransform rectTransform;
     private Image dropperImage;
 
-    // CACHE: Lưu sprite và scale của current jelly để tránh lẫn lộn
     private Sprite cachedCurrentSprite;
     private Vector3 cachedCurrentScale;
+    
+    private Camera mainCamera;
 
     private void Awake()
     {
         rectTransform = GetComponent<RectTransform>();
         dropperImage = GetComponent<Image>();
+        mainCamera = Camera.main; 
         
         if (dropperImage != null)
         {
@@ -44,50 +44,35 @@ public class DropperController : MonoBehaviour
     {
         parentCanvas = GetComponentInParent<Canvas>();
         
-        // ẨN Score và NextJelly ban đầu
-        if (nextJellyfishImage != null)
-        {
-            nextJellyfishImage.gameObject.SetActive(false);
-        }
-        if (scoreText != null)
-        {
-            scoreText.gameObject.SetActive(false);
-        }
-
-        // ĐẶT DROPPER NGOÀI CAMERA (Y rất cao)
-        if (rectTransform != null)
-        {
-            Vector2 pos = rectTransform.anchoredPosition;
-            pos.y = dropperY + 700f; // Ngoài camera
-            pos.x = 0;
-            rectTransform.anchoredPosition = pos;
-        }
-
-        Debug.Log("DropperController ready - waiting for start signal");
+        // SỬA LỖI 2: Gọi ResetDropper để ẩn mọi thứ
+        ResetDropper(); 
     }
 
     private void Update()
     {
-        if (!canMove || rectTransform == null || parentCanvas == null) return;
+        // SỬA LỖI 4/5: Logic Update MỚI
+        // 1. Chỉ di chuyển dropper khi nó active
+        if (!isDropperActive || rectTransform == null || parentCanvas == null) return;
 
-        // Di chuyển theo chuột
+        // (Code di chuyển dropper theo chuột giữ nguyên)
         Vector2 localPoint;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
             parentCanvas.transform as RectTransform,
             Input.mousePosition,
-            parentCanvas.worldCamera,
+            parentCanvas.worldCamera, 
             out localPoint
         );
-
         float clampedX = Mathf.Clamp(localPoint.x, minX, maxX);
-
         Vector2 newPos = rectTransform.anchoredPosition;
         newPos.x = clampedX;
         newPos.y = dropperY;
         rectTransform.anchoredPosition = newPos;
 
-        // Thả jellyfish
-        if ((Input.GetMouseButtonDown(0) || Input.GetKeyDown(dropKey)) && canDrop)
+        // 2. Kiểm tra điều kiện thả
+        // CHỈ thả khi: Active, Không có merge, và Người chơi nhấn nút
+        if (isDropperActive && 
+            GameManager.MergingCoroutines == 0 && 
+            (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)))
         {
             DropJellyfish();
         }
@@ -97,159 +82,149 @@ public class DropperController : MonoBehaviour
     {
         Debug.Log("StartDropperSequence called!");
         
-        // HIỆN Score và NextJelly
-        if (nextJellyfishImage != null)
-        {
-            nextJellyfishImage.gameObject.SetActive(true);
-        }
-        if (scoreText != null)
-        {
-            scoreText.gameObject.SetActive(true);
-        }
+        // SỬA LỖI 2: HIỆN UI
+        if (nextJellyfishImage != null) nextJellyfishImage.gameObject.SetActive(true);
+        if (scoreText != null) scoreText.gameObject.SetActive(true);
+        // (currentJellyfishImage sẽ hiện trong LoadCurrentJellyfish)
 
-        // Load current jellyfish TRƯỚC (để có sprite và scale)
         LoadCurrentJellyfish();
         
-        // Animation dropper đi xuống BÌNH THƯỜNG (không nhún)
         if (rectTransform != null)
         {
-            // Đang ở ngoài camera, đi xuống vị trí dropperY
             rectTransform.DOAnchorPosY(dropperY, 0.6f).SetEase(Ease.OutQuad);
         }
 
-        // Cho phép di chuyển sau animation
         DOVirtual.DelayedCall(0.6f, () => 
         { 
-            canMove = true;
-            Debug.Log("Can move now!");
+            isDropperActive = true; // Sẵn sàng
+            Debug.Log("Dropper is Active!");
         });
     }
 
     public void LoadCurrentJellyfish()
     {
-        if (GameManager.Instance == null)
-        {
-            Debug.LogWarning("GameManager.Instance is null!");
-            return;
-        }
+        if (GameManager.Instance == null) return;
 
         int currentLevel = GameManager.Instance.currentJellyfishLevel;
         Debug.Log($"Loading CURRENT jellyfish level: {currentLevel}");
 
-        // Lấy thông tin từ prefab
         if (currentLevel >= 0 && currentLevel < GameManager.Instance.jellyfishPrefabs.Length)
         {
             GameObject prefab = GameManager.Instance.jellyfishPrefabs[currentLevel];
             if (prefab != null)
             {
-                SpriteRenderer sr = prefab.GetComponent<SpriteRenderer>();
+                // SỬA LỖI 1 (Phòng hờ): Dùng GetComponentInChildren
+                SpriteRenderer sr = prefab.GetComponentInChildren<SpriteRenderer>();
                 if (sr != null)
                 {
-                    // CACHE sprite và scale GỐC từ prefab
                     cachedCurrentSprite = sr.sprite;
                     cachedCurrentScale = prefab.transform.localScale;
 
-                    Debug.Log($"Cached current: {cachedCurrentSprite.name}, scale: {cachedCurrentScale}");
-
-                    // Hiển thị trong CurrentJelly
                     if (currentJellyfishImage != null)
                     {
+                        currentJellyfishImage.enabled = true; 
                         currentJellyfishImage.sprite = cachedCurrentSprite;
                         currentJellyfishImage.preserveAspect = true;
-                        currentJellyfishImage.SetNativeSize(); // Set size theo sprite
+                        currentJellyfishImage.SetNativeSize(); 
                         
-                        // ANIMATION: Scale từ 0 lên scale GỐC của prefab
                         currentJellyfishImage.transform.localScale = Vector3.zero;
                         currentJellyfishImage.transform.DOScale(cachedCurrentScale, 0.4f).SetEase(Ease.OutBack);
                     }
                 }
             }
         }
-
-        // Cập nhật next jelly preview
         UpdateNextJellyfishPreview();
     }
 
     private void UpdateNextJellyfishPreview()
     {
         if (GameManager.Instance == null || nextJellyfishImage == null) return;
-
         int previewLevel = GameManager.Instance.nextJellyfishLevel;
-        Debug.Log($"Updating NEXT jellyfish preview level: {previewLevel}");
-
         if (previewLevel >= 0 && previewLevel < GameManager.Instance.jellyfishPrefabs.Length)
         {
             GameObject prefab = GameManager.Instance.jellyfishPrefabs[previewLevel];
             if (prefab != null)
             {
-                SpriteRenderer sr = prefab.GetComponent<SpriteRenderer>();
+                // SỬA LỖI 1 (Phòng hờ): Dùng GetComponentInChildren
+                SpriteRenderer sr = prefab.GetComponentInChildren<SpriteRenderer>();
                 if (sr != null)
                 {
                     nextJellyfishImage.sprite = sr.sprite;
-                    
-                    // Set size native
                     Vector3 prefabScale = prefab.transform.localScale;
-                    ImageSizeHelper.SetNativeSize(nextJellyfishImage, sr.sprite, prefabScale);
+                    nextJellyfishImage.preserveAspect = true;
+                    nextJellyfishImage.SetNativeSize(); 
                     
-                    // ANIMATION: Scale từ 0 lên scale gốc
                     nextJellyfishImage.transform.localScale = Vector3.zero;
                     nextJellyfishImage.transform.DOScale(prefabScale, 0.3f).SetEase(Ease.OutBack);
-                    
-                    Debug.Log($"Updated next preview: {sr.sprite.name}, scale: {prefabScale}");
                 }
             }
         }
     }
 
+    // SỬA LỖI 4/5: Logic thả MỚI
     public void DropJellyfish()
     {
-        if (!canDrop) return;
-
         Debug.Log($"Dropping jellyfish: {cachedCurrentSprite.name} at X: {rectTransform.anchoredPosition.x}");
-        canDrop = false;
-
-        // Animation rơi
+        
+        // 1. Ẩn sứa trên dropper ngay lập tức (Lỗi 4)
         if (currentJellyfishImage != null)
         {
-            currentJellyfishImage.transform.DOScale(0, 0.2f).SetEase(Ease.InBack);
+            currentJellyfishImage.enabled = false; 
+            currentJellyfishImage.transform.DOKill(); 
         }
 
-        // Spawn jellyfish vật lý
+        // 2. Tính vị trí thả (Lỗi 4)
         Vector3 worldSpawnPos = CalculateWorldSpawnPosition();
+        
+        // 3. Gọi GameManager (sẽ tăng MergingCoroutines lên 1)
         GameManager.Instance.OnDropJellyfish(worldSpawnPos);
 
-        // Load jellyfish mới sau cooldown
-        DOVirtual.DelayedCall(dropCooldown, () =>
-        {
-            LoadCurrentJellyfish();
-            canDrop = true;
-        });
+        // 4. Load sứa MỚI lên dropper ngay lập tức
+        // (Bạn sẽ thấy sứa mới, nhưng không thể thả vì MergingCoroutines > 0)
+        LoadCurrentJellyfish();
     }
 
     private Vector3 CalculateWorldSpawnPosition()
     {
-        if (spawnPoint != null)
+        if (spawnPoint == null || mainCamera == null)
         {
-            Vector3 pos = spawnPoint.position;
-            
-            // Tính X dựa trên vị trí dropper UI
-            // Chuyển đổi từ UI space (-300 to 300) sang World space (-3 to 3)
-            float uiX = rectTransform.anchoredPosition.x;
-            float worldX = (uiX / 300f) * 3f; // Scale theo tỷ lệ bình nước
-            
-            pos.x = worldX;
-            pos.z = 0; // Đảm bảo Z = 0 (gần camera)
-            
-            Debug.Log($"Spawn: UI X={uiX} → World pos={pos}");
-            return pos;
+            Debug.LogError("SpawnPoint hoặc MainCamera chưa được gán!");
+            return Vector3.zero;
         }
 
-        // Fallback: dùng center màn hình
-        Vector3 centerScreen = new Vector3(Screen.width / 2f, Screen.height / 2f, 0);
-        Vector3 worldPos = Camera.main.ScreenToWorldPoint(centerScreen);
-        worldPos.z = 0;
+        Vector3 spawnPointScreenPos = mainCamera.WorldToScreenPoint(spawnPoint.position);
+        float mouseX = Input.mousePosition.x;
+        Vector3 dropScreenPosition = new Vector3(mouseX, spawnPointScreenPos.y, spawnPointScreenPos.z);
+        Vector3 worldSpawnPos = mainCamera.ScreenToWorldPoint(dropScreenPosition);
+        worldSpawnPos.z = 0; 
         
-        Debug.LogWarning("No spawnPoint set, using screen center");
-        return worldPos;
+        return worldSpawnPos;
+    }
+
+    // SỬA LỖI 2/3: Hàm Reset (gọi bởi GameFlowManager)
+    public void ResetDropper()
+    {
+        Debug.Log("Resetting Dropper...");
+        isDropperActive = false; // Tắt di chuyển/thả
+        
+        if(rectTransform != null) rectTransform.DOKill();
+        if (currentJellyfishImage != null)
+        {
+            currentJellyfishImage.transform.DOKill();
+            currentJellyfishImage.enabled = false;
+        }
+
+        // ẨN UI
+        if (nextJellyfishImage != null) nextJellyfishImage.gameObject.SetActive(false);
+        if (scoreText != null) scoreText.gameObject.SetActive(false);
+
+        // ĐẶT DROPPER NGOÀI CAMERA
+        if (rectTransform != null)
+        {
+            Vector2 pos = rectTransform.anchoredPosition;
+            pos.y = dropperY + 700f; // Vị trí ẩn
+            pos.x = 0;
+            rectTransform.anchoredPosition = pos;
+        }
     }
 }

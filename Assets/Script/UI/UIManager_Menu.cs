@@ -7,44 +7,28 @@ public class UIManager_Menu : MonoBehaviour
     public Button startButton;
     public GameFlowManager gameFlowManager;
 
-    private void Start()
+    void Start()
     {
-        // Kiểm tra null trước khi sử dụng
-        if (highScoreText != null)
-        {
-            int highscore = PlayerPrefs.GetInt("Highscore", 0);
-            highScoreText.text =  highscore.ToString();
-        }
-        else
-        {
-            Debug.LogWarning("highScoreText chưa được gán trong Inspector!");
-            
-        }
+        UpdateHighScoreText(); // Gọi hàm chung
 
-        if (startButton != null)
+        if (startButton != null && gameFlowManager != null)
         {
-            startButton.onClick.AddListener(OnStartPressed);
-        }
-        else
-        {
-            Debug.LogWarning("startButton chưa được gán trong Inspector!");
-        }
-
-        if (gameFlowManager == null)
-        {
-            Debug.LogError("gameFlowManager chưa được gán trong Inspector!");
+            startButton.onClick.AddListener(gameFlowManager.OnStartGamePressed);
         }
     }
 
-    public void OnStartPressed()
+    // (Yêu cầu 2) Hàm này chạy mỗi khi GameObject được BẬT
+    void OnEnable()
     {
-        if (gameFlowManager != null)
+        UpdateHighScoreText();
+    }
+
+    // Hàm chung để cập nhật high score
+    void UpdateHighScoreText()
+    {
+        if (highScoreText != null)
         {
-            gameFlowManager.OnStartGamePressed();
-        }
-        else
-        {
-            Debug.LogError("Không thể start game vì gameFlowManager = null!");
+            highScoreText.text = PlayerPrefs.GetInt("Highscore", 0).ToString();
         }
     }
 }
