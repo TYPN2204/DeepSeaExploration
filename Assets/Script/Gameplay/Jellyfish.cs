@@ -7,12 +7,14 @@ public class Jellyfish : MonoBehaviour
     [Header("Data")]
     public int jellyLevel; 
 
-    private bool hasMerged = false;
+    public bool HasMerged { get; private set; } = false;
+    public bool IsMerging { get; private set; } = false;
+    
     private Rigidbody2D rb;
+    private float moveThreshold = 0.1f; 
 
     void Awake()
     {
-        // SỬA LỖI (Ảnh): Dùng GetComponentInChildren để tìm Rigidbody2D ở con
         rb = GetComponentInChildren<Rigidbody2D>();
         
         if (rb != null)
@@ -22,29 +24,45 @@ public class Jellyfish : MonoBehaviour
         }
         else
         {
-            // Báo lỗi nếu không tìm thấy Rigidbody2D
             Debug.LogError($"Jellyfish {gameObject.name} không tìm thấy Rigidbody2D ở con!");
         }
     }
 
-    public IEnumerator SettleCheck(float delay)
+    public bool IsMoving()
     {
-        yield return new WaitForSeconds(delay);
-        
-        if (GameManager.MergingCoroutines > 0)
-        {
-            GameManager.MergingCoroutines--;
-        }
-        Debug.Log($"SettleCheck complete. Merging count: {GameManager.MergingCoroutines}");
+        if (rb == null) return false;
+        return rb.velocity.magnitude > moveThreshold; 
     }
 
     public void OnCollisionEnter2D(Collision2D collision)
     {
-        if (hasMerged) return;
+        if (this.HasMerged) return; 
+        
         Jellyfish other = collision.gameObject.GetComponent<Jellyfish>();
-
-        if (other != null && other.jellyLevel == this.jellyLevel && !other.hasMerged)
+        if (other == null && collision.transform.parent != null)
         {
+            other = collision.transform.parent.GetComponent<Jellyfish>();
+        }
+
+        if (other != null && other.jellyLevel == this.jellyLevel && !other.HasMerged) 
+        {
+            // SỬA LỖI "VĂNG": Tắt vật lý và vận tốc NGAY LẬP TỨC
+            // để ngăn chúng nảy ra trước khi merge
+            if (rb != null) 
+            {
+                rb.velocity = Vector2.zero;
+                rb.angularVelocity = 0;
+                rb.isKinematic = true;
+            }
+            Rigidbody2D otherRb = other.GetComponentInChildren<Rigidbody2D>();
+            if (otherRb != null) 
+            {
+                otherRb.velocity = Vector2.zero;
+                otherRb.angularVelocity = 0;
+                otherRb.isKinematic = true;
+            }
+            
+            // Chỉ 1 sứa (ID nhỏ hơn) chạy logic
             if (this.GetInstanceID() < other.GetInstanceID())
             {
                 StartCoroutine(MergeAnimation(other));
@@ -54,19 +72,17 @@ public class Jellyfish : MonoBehaviour
 
     IEnumerator MergeAnimation(Jellyfish other)
     {
-        this.hasMerged = true;
-        other.hasMerged = true;
-
-        GameManager.MergingCoroutines++;
-        Debug.Log($"Merge started. Merging count: {GameManager.MergingCoroutines}");
-
-        if (rb != null) rb.isKinematic = true;
+        this.HasMerged = true;
+        other.HasMerged = true; 
         
-        // SỬA LỖI: Phải tìm Rigidbody của "other"
+        this.IsMerging = true;
+        other.IsMerging = true;
+
+        // (Code tắt vật lý đã chạy ở trên, nhưng để đây cho chắc)
+        if (rb != null) rb.isKinematic = true;
         Rigidbody2D otherRb = other.GetComponentInChildren<Rigidbody2D>();
         if (otherRb != null) otherRb.isKinematic = true;
         
-        // SỬA LỖI: Tìm Collider ở con
         Collider2D col = GetComponentInChildren<Collider2D>();
         if (col != null) col.enabled = false;
         
@@ -77,7 +93,7 @@ public class Jellyfish : MonoBehaviour
         Transform lowerJelly = (higherJelly == this.transform) ? other.transform : this.transform;
         Vector3 mergePosition = lowerJelly.position;
 
-        float animTime = 0.4f; // Giữ nguyên 0.4s
+        float animTime = 0.4f; 
 
         higherJelly.DOMove(mergePosition, animTime).SetEase(Ease.InQuad);
         transform.DOScale(Vector3.zero, animTime).SetEase(Ease.InBack);
@@ -101,28 +117,10 @@ public class Jellyfish : MonoBehaviour
             int newLevel = this.jellyLevel + 1;
             if (newLevel < GameManager.Instance.jellyfishPrefabs.Length)
             {
-                GameManager.MergingCoroutines++;
-                Debug.Log($"Spawning new jelly. Merging count: {GameManager.MergingCoroutines}");
-
-                GameObject newJellyObj = GameManager.Instance.SpawnJellyfish(mergePosition, newLevel, true);
-                
-                if(newJellyObj != null)
-                {
-                    Jellyfish newJellyScript = newJellyObj.GetComponent<Jellyfish>();
-                    if(newJellyScript != null)
-                    {
-                        newJellyScript.StartCoroutine(newJellyScript.SettleCheck(0.5f));
-                    }
-                }
+                GameManager.Instance.SpawnJellyfish(mergePosition, newLevel, true);
             }
         }
         
-        if (GameManager.MergingCoroutines > 0)
-        {
-            GameManager.MergingCoroutines--;
-        }
-        Debug.Log($"Merge anim complete. Merging count: {GameManager.MergingCoroutines}");
-
         Destroy(gameObject);
         Destroy(other.gameObject);
     }

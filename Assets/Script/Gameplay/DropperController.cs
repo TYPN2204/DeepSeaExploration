@@ -17,8 +17,7 @@ public class DropperController : MonoBehaviour
     [Header("Drop Settings")]
     public Transform spawnPoint; 
     
-    // SỬA LỖI 4/5: Đổi tên biến
-    private bool isDropperActive = false; // Tắt di chuyển/thả ban đầu
+    private bool isDropperActive = false; 
     private Canvas parentCanvas;
     private RectTransform rectTransform;
     private Image dropperImage;
@@ -44,17 +43,13 @@ public class DropperController : MonoBehaviour
     {
         parentCanvas = GetComponentInParent<Canvas>();
         
-        // SỬA LỖI 2: Gọi ResetDropper để ẩn mọi thứ
         ResetDropper(); 
     }
 
     private void Update()
     {
-        // SỬA LỖI 4/5: Logic Update MỚI
-        // 1. Chỉ di chuyển dropper khi nó active
         if (!isDropperActive || rectTransform == null || parentCanvas == null) return;
 
-        // (Code di chuyển dropper theo chuột giữ nguyên)
         Vector2 localPoint;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
             parentCanvas.transform as RectTransform,
@@ -68,13 +63,20 @@ public class DropperController : MonoBehaviour
         newPos.y = dropperY;
         rectTransform.anchoredPosition = newPos;
 
-        // 2. Kiểm tra điều kiện thả
-        // CHỈ thả khi: Active, Không có merge, và Người chơi nhấn nút
+        // SỬA: Logic thả MỚI
         if (isDropperActive && 
-            GameManager.MergingCoroutines == 0 && 
             (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)))
         {
-            DropJellyfish();
+            // Hỏi GameManager trước khi thả
+            // (Thêm kiểm tra GameManager.Instance != null để tránh lỗi)
+            if (GameManager.Instance != null && GameManager.Instance.CanDrop())
+            {
+                DropJellyfish();
+            }
+            else
+            {
+                Debug.Log("CANNOT DROP: Jellies are moving or merging.");
+            }
         }
     }
 
@@ -82,10 +84,8 @@ public class DropperController : MonoBehaviour
     {
         Debug.Log("StartDropperSequence called!");
         
-        // SỬA LỖI 2: HIỆN UI
         if (nextJellyfishImage != null) nextJellyfishImage.gameObject.SetActive(true);
         if (scoreText != null) scoreText.gameObject.SetActive(true);
-        // (currentJellyfishImage sẽ hiện trong LoadCurrentJellyfish)
 
         LoadCurrentJellyfish();
         
@@ -96,7 +96,7 @@ public class DropperController : MonoBehaviour
 
         DOVirtual.DelayedCall(0.6f, () => 
         { 
-            isDropperActive = true; // Sẵn sàng
+            isDropperActive = true; 
             Debug.Log("Dropper is Active!");
         });
     }
@@ -113,7 +113,6 @@ public class DropperController : MonoBehaviour
             GameObject prefab = GameManager.Instance.jellyfishPrefabs[currentLevel];
             if (prefab != null)
             {
-                // SỬA LỖI 1 (Phòng hờ): Dùng GetComponentInChildren
                 SpriteRenderer sr = prefab.GetComponentInChildren<SpriteRenderer>();
                 if (sr != null)
                 {
@@ -145,7 +144,6 @@ public class DropperController : MonoBehaviour
             GameObject prefab = GameManager.Instance.jellyfishPrefabs[previewLevel];
             if (prefab != null)
             {
-                // SỬA LỖI 1 (Phòng hờ): Dùng GetComponentInChildren
                 SpriteRenderer sr = prefab.GetComponentInChildren<SpriteRenderer>();
                 if (sr != null)
                 {
@@ -161,26 +159,20 @@ public class DropperController : MonoBehaviour
         }
     }
 
-    // SỬA LỖI 4/5: Logic thả MỚI
     public void DropJellyfish()
     {
         Debug.Log($"Dropping jellyfish: {cachedCurrentSprite.name} at X: {rectTransform.anchoredPosition.x}");
         
-        // 1. Ẩn sứa trên dropper ngay lập tức (Lỗi 4)
         if (currentJellyfishImage != null)
         {
             currentJellyfishImage.enabled = false; 
             currentJellyfishImage.transform.DOKill(); 
         }
 
-        // 2. Tính vị trí thả (Lỗi 4)
         Vector3 worldSpawnPos = CalculateWorldSpawnPosition();
         
-        // 3. Gọi GameManager (sẽ tăng MergingCoroutines lên 1)
         GameManager.Instance.OnDropJellyfish(worldSpawnPos);
 
-        // 4. Load sứa MỚI lên dropper ngay lập tức
-        // (Bạn sẽ thấy sứa mới, nhưng không thể thả vì MergingCoroutines > 0)
         LoadCurrentJellyfish();
     }
 
@@ -201,11 +193,10 @@ public class DropperController : MonoBehaviour
         return worldSpawnPos;
     }
 
-    // SỬA LỖI 2/3: Hàm Reset (gọi bởi GameFlowManager)
     public void ResetDropper()
     {
         Debug.Log("Resetting Dropper...");
-        isDropperActive = false; // Tắt di chuyển/thả
+        isDropperActive = false; 
         
         if(rectTransform != null) rectTransform.DOKill();
         if (currentJellyfishImage != null)
@@ -214,15 +205,13 @@ public class DropperController : MonoBehaviour
             currentJellyfishImage.enabled = false;
         }
 
-        // ẨN UI
         if (nextJellyfishImage != null) nextJellyfishImage.gameObject.SetActive(false);
         if (scoreText != null) scoreText.gameObject.SetActive(false);
 
-        // ĐẶT DROPPER NGOÀI CAMERA
         if (rectTransform != null)
         {
             Vector2 pos = rectTransform.anchoredPosition;
-            pos.y = dropperY + 700f; // Vị trí ẩn
+            pos.y = dropperY + 700f; 
             pos.x = 0;
             rectTransform.anchoredPosition = pos;
         }

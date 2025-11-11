@@ -1024,8 +1024,8 @@ MonoBehaviour:
   musicSource: {fileID: 525006490}
   menuMusic: {fileID: 8300000, guid: 02f06aedb224be7498249221c6a27ae6, type: 3}
   gameplayMusic: {fileID: 8300000, guid: 18fab79432e4abd41b3098364b42ac50, type: 3}
-  menuMusicVolume: 0.1
-  gameplayMusicVolume: 0.1
+  menuMusicVolume: 0.15
+  gameplayMusicVolume: 0.05
   sfxSource: {fileID: 525006490}
   bubbleSound: {fileID: 0}
   mergeSounds: []
@@ -1804,7 +1804,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: -506.5, y: 12}
-  m_SizeDelta: {x: 263.7, y: 81.6}
+  m_SizeDelta: {x: 450, y: 81.6}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1243514028
 CanvasRenderer:
@@ -1847,7 +1847,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 1234
+  m_Text: 
 --- !u!1 &1261949525
 GameObject:
   m_ObjectHideFlags: 0
@@ -2067,7 +2067,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: -506.5, y: -106.8}
-  m_SizeDelta: {x: 263.7, y: 81.6}
+  m_SizeDelta: {x: 300, y: 81.6}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1302822878
 MonoBehaviour:
@@ -2102,7 +2102,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 1234
+  m_Text: 
 --- !u!222 &1302822879
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2203,8 +2203,8 @@ MonoBehaviour:
   currentJellyfishImage: {fileID: 8800610}
   nextJellyfishImage: {fileID: 1191978530}
   scoreText: {fileID: 1001678380}
-  minX: -305
-  maxX: 305
+  minX: -296
+  maxX: 296
   dropperY: 444.7
   spawnPoint: {fileID: 568233137}
 --- !u!1 &1463038200

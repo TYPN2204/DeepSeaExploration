@@ -23,8 +23,9 @@ public class GameManager : MonoBehaviour
     [Header("Core")] 
     public AudioManager audioManager;
 
-    // THÊM (Lỗi 5): Biến đếm số sứa đang merge/spawn
-    public static int MergingCoroutines = 0;
+    private EdgeCollider2D tankCollider;
+    private float tankMinX;
+    private float tankMaxX;
 
     private void Awake()
     {
@@ -32,12 +33,26 @@ public class GameManager : MonoBehaviour
         else Destroy(gameObject);
         
         audioManager = FindObjectOfType<AudioManager>();
+        
+        GameObject tank = GameObject.Find("JellyfishTankCollider");
+        if (tank != null) 
+        {
+            tankCollider = tank.GetComponent<EdgeCollider2D>();
+            if (tankCollider != null)
+            {
+                tankMinX = tankCollider.bounds.min.x;
+                tankMaxX = tankCollider.bounds.max.x;
+            }
+        }
+        if (tankCollider == null)
+        {
+            Debug.LogError("Không tìm thấy 'JellyfishTankCollider'! Sứa có thể bị tràn.");
+        }
     }
 
     private void Start()
     {
         highScore = PlayerPrefs.GetInt("Highscore", 0);
-        // SỬA (Lỗi 3): Không gọi StartGame() ở đây, GameFlowManager sẽ gọi
     }
 
     private void PrepareInitialJellyfish()
@@ -50,16 +65,13 @@ public class GameManager : MonoBehaviour
         Debug.Log($"Initial setup: currentJellyfishLevel = {currentJellyfishLevel}, nextJellyfishLevel = {nextJellyfishLevel}");
     }
 
-    // THÊM (Lỗi 3): Hàm reset game, được gọi bởi GameFlowManager
     public void StartGame()
     {
         Debug.Log("GameManager.StartGame() called!");
         currentScore = 0;
-        MergingCoroutines = 0; // Reset bộ đếm
         UpdateScoreUI();
         PrepareInitialJellyfish();
         
-        // Đảm bảo game canvas đang bật
         if(gameCanvas != null) gameCanvas.gameObject.SetActive(true);
     }
 
@@ -89,7 +101,6 @@ public class GameManager : MonoBehaviour
         Debug.Log($"PrepareNextJelly: nextJellyfishLevel = {nextJellyfishLevel}");
     }
 
-    // SỬA (Lỗi 1, 5): Trả về GameObject để chạy SettleCheck
     public GameObject SpawnJellyfish(Vector3 position, int jellyLevel, bool playMergeAnim = false)
     {
         if (jellyLevel < 0 || jellyLevel >= jellyfishPrefabs.Length)
@@ -97,75 +108,120 @@ public class GameManager : MonoBehaviour
             Debug.LogError($"Invalid jellyLevel: {jellyLevel}");
             return null;
         }
+        
+        GameObject prefab = jellyfishPrefabs[jellyLevel];
 
-        GameObject obj = Instantiate(jellyfishPrefabs[jellyLevel], position, Quaternion.identity);
+        // (Code "Safe Spawn" - kẹp X trong thành bình)
+        if (tankCollider != null)
+        {
+            CircleCollider2D prefabCollider = prefab.GetComponentInChildren<CircleCollider2D>();
+            if (prefabCollider != null)
+            {
+                float scale = prefab.transform.localScale.x;
+                float radius = prefabCollider.radius * scale;
+                float childLocalX = prefabCollider.transform.localPosition.x;
+                float colliderOffsetX = prefabCollider.offset.x;
+                float totalOffset = (childLocalX + colliderOffsetX) * scale;
+
+                float safeMinX = tankMinX - totalOffset + radius;
+                float safeMaxX = tankMaxX - totalOffset - radius;
+
+                position.x = Mathf.Clamp(position.x, safeMinX, safeMaxX);
+            }
+        }
+
+        GameObject obj = Instantiate(prefab, position, Quaternion.identity);
         Jellyfish jelly = obj.GetComponent<Jellyfish>();
         if (jelly != null)
         {
             jelly.jellyLevel = jellyLevel;
         }
 
-        // Animation spawn khi merge
         if (playMergeAnim)
         {
+            // SỬA LỖI "ĐÁ VĂNG":
+            // 1. Lấy Rigidbody
+            Rigidbody2D newRb = obj.GetComponentInChildren<Rigidbody2D>();
+            if (newRb != null)
+            {
+                // 2. Tắt vật lý (isKinematic) TRƯỚC KHI scale
+                newRb.isKinematic = true; 
+            }
+
+            // 3. Chạy animation
             Vector3 newScale = obj.transform.localScale;
             obj.transform.localScale = Vector3.zero;
             
-            // Animation scale
             obj.transform.DOScale(newScale, 0.3f).SetEase(Ease.OutBack);
             
-            // Animation xoay
+            // 4. Chạy anim xoay VÀ BẬT LẠI VẬT LÝ khi xong
             obj.transform.DOShakeRotation(0.5f, new Vector3(0, 0, 10), 5, 90)
-                         .SetEase(Ease.OutQuad);
+                         .SetEase(Ease.OutQuad)
+                         .OnComplete(() => {
+                             // 5. Bật lại vật lý SAU KHI anim xong
+                             if (newRb != null)
+                             {
+                                 newRb.isKinematic = false;
+                             }
+                         });
         }
         
         Debug.Log($"Spawned jellyfish level {jellyLevel} at {position}");
-        return obj; // Trả về sứa vừa tạo
+        return obj; 
     }
 
     public void OnDropJellyfish(Vector3 dropPosition)
     {
         Debug.Log($"OnDropJellyfish: Dropping level {currentJellyfishLevel} at {dropPosition}");
 
-        // THÊM (Lỗi 5): Báo có sứa MỚI vừa RƠI
-        MergingCoroutines++;
-        Debug.Log($"Jelly dropped. Merging count: {MergingCoroutines}");
-
-        // Spawn sứa (không anim merge) VÀ lấy về
-        GameObject newJellyObj = SpawnJellyfish(dropPosition, currentJellyfishLevel, false);
-
-        // Yêu cầu sứa vừa rơi chạy SettleCheck
-        if(newJellyObj != null)
-        {
-            Jellyfish newJellyScript = newJellyObj.GetComponent<Jellyfish>();
-            if(newJellyScript != null)
-            {
-                // Sứa mới sẽ tự giảm MergingCoroutines sau 0.5s
-                newJellyScript.StartCoroutine(newJellyScript.SettleCheck(0.5f));
-            }
-        }
-
+        SpawnJellyfish(dropPosition, currentJellyfishLevel, false);
+        
         currentJellyfishLevel = nextJellyfishLevel;
         PrepareNextJelly();
         
         Debug.Log($"After drop: currentJellyfishLevel = {currentJellyfishLevel}, nextJellyfishLevel = {nextJellyfishLevel}");
     }
 
+    public bool CanDrop()
+    {
+        Jellyfish[] allJellies = FindObjectsOfType<Jellyfish>();
+        
+        foreach (Jellyfish jelly in allJellies)
+        {
+            if (jelly == null) continue; 
+            
+            if (jelly.IsMerging)
+            {
+                return false; 
+            }
+                
+            if (jelly.IsMoving())
+            {
+                return false; 
+            }
+        }
+        
+        return true; 
+    }
+
     public void ExitToMenu()
     {
-        // SỬA (Lỗi 3): Reset điểm VÀ bộ đếm
         currentScore = 0; 
-        MergingCoroutines = 0;
         
         PlayerPrefs.SetInt("Highscore", highScore);
-        if (gameCanvas != null) gameCanvas.gameObject.SetActive(false);
+        if (gameCanvas != null) 
+        {
+            gameCanvas.gameObject.SetActive(false);
+        }
         
         Jellyfish[] allJellies = FindObjectsOfType<Jellyfish>();
         foreach (Jellyfish jelly in allJellies)
         {
-            // Hủy tween và xóa
-            jelly.transform.DOKill();
-            Destroy(jelly.gameObject);
+            if (jelly != null)
+            {
+                jelly.transform.DOKill();
+                Destroy(jelly.gameObject);
+            }
         }
     }
 
@@ -181,7 +237,6 @@ public class GameManager : MonoBehaviour
         GameOverManager gameOverManager = FindObjectOfType<GameOverManager>();
         if (gameOverManager != null)
         {
-            // Gửi điểm HIỆN TẠI
             gameOverManager.ShowGameOver(currentScore);
         }
         else
@@ -189,8 +244,6 @@ public class GameManager : MonoBehaviour
             Debug.LogError("GameOverManager not found!");
         }
         
-        // SỬA (Lỗi 3): Reset điểm VÀ bộ đếm (SAU KHI gửi điểm)
         currentScore = 0;
-        MergingCoroutines = 0;
     }
 }

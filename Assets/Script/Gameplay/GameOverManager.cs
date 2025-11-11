@@ -69,13 +69,13 @@ public class GameOverManager : MonoBehaviour
         // 3. Cập nhật Text
         if (currentScoreText != null)
         {
-            currentScoreText.text = finalScore.ToString();
+            currentScoreText.text = "My score: " +finalScore.ToString();
         }
         
         int highScore = PlayerPrefs.GetInt("Highscore", 0);
         if (highestScoreText != null)
         {
-            highestScoreText.text = highScore.ToString();
+            highestScoreText.text = "Highest score: " + highScore.ToString();
         }
 
         // 4. Chuẩn bị UI Game Over (Ẩn)
